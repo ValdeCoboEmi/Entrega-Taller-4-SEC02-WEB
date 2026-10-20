@@ -131,6 +131,13 @@ body {
   margin: 0;
 }
 
+.health-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
 .health-ok {
   border-left-color: #198754;
   color: #146c43;
@@ -144,4 +151,11 @@ body {
 .health-loading {
   border-left-color: #ffc107;
   color: #997404;
+}
+
+@media (max-width: 480px) {
+  .health-content {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }

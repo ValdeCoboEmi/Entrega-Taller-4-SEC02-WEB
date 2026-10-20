@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   Alert,
   Badge,
+  Button,
   Card,
   CardBody,
   Col,
@@ -12,6 +13,7 @@ import {
 
 const API_URL = import.meta.env.VITE_API_URL;
 
+//FUNCION para hacer requests 
 async function request(path, signal) {
   if (!API_URL) {
     throw new Error('VITE_API_URL no está configurada.');
@@ -29,18 +31,36 @@ async function request(path, signal) {
 
 function HomePage() {
   const [health, setHealth] = useState({ isLoading: true, message: '', error: '' });
+  const [healthRetryCount, setHealthRetryCount] = useState(0);
   const [info, setInfo] = useState({ isLoading: true, integrantes: [], error: '' });
 
   useEffect(() => {
     const controller = new AbortController();
 
-    request('/health', controller.signal)
-      .then((result) => setHealth({ isLoading: false, message: result.message, error: '' }))
-      .catch((error) => {
-        if (error.name !== 'AbortError') {
-          setHealth({ isLoading: false, message: '', error: 'No se pudo conectar con el API.' });
-        }
-      });
+    const minimumLoadingTime = healthRetryCount > 0
+      ? new Promise((resolve) => setTimeout(resolve, 2000))
+      : Promise.resolve();
+
+    Promise.allSettled([
+      request('/health', controller.signal),
+      minimumLoadingTime,
+    ]).then(([result]) => {
+      if (controller.signal.aborted) {
+        return;
+      }
+
+      if (result.status === 'fulfilled') {
+        setHealth({ isLoading: false, message: result.value.message, error: '' });
+      } else if (result.reason.name !== 'AbortError') {
+        setHealth({ isLoading: false, message: '', error: 'No se pudo conectar con el API.' });
+      }
+    });
+
+    return () => controller.abort();
+  }, [healthRetryCount]);
+
+  useEffect(() => {
+    const controller = new AbortController();
 
     request('/info', controller.signal)
       .then((result) => setInfo({ isLoading: false, integrantes: result.data, error: '' }))
@@ -54,6 +74,10 @@ function HomePage() {
   }, []);
 
   const healthState = health.isLoading ? 'loading' : health.error ? 'error' : 'ok';
+  const retryHealth = () => {
+    setHealth({ isLoading: true, message: '', error: '' });
+    setHealthRetryCount((count) => count + 1);
+  };
 
   return (
     <main className="home-page py-5">
@@ -65,8 +89,21 @@ function HomePage() {
 
         <section className="mb-5">
           <div className={`health-box health-${healthState}`}>
-            <h4>Estado del API</h4>
-            <p>{health.isLoading ? 'Verificando...' : health.error || health.message}</p>
+            <div className="health-content">
+              <div>
+                <h4>Estado del API</h4>
+                <p>{health.isLoading ? 'Verificando...' : health.error || health.message}</p>
+              </div>
+              <Button
+                color="success"
+                outline
+                size="sm"
+                disabled={health.isLoading}
+                onClick={retryHealth}
+              >
+                {health.isLoading ? 'Verificando...' : 'Volver a probar'}
+              </Button>
+            </div>
           </div>
         </section>
 
@@ -87,18 +124,15 @@ function HomePage() {
           {!info.isLoading && !info.error && (
             <Row className="g-4">
               {info.integrantes.map((integrante) => (
-                <Col md="6" lg="4" key={integrante.id}>
+                <Col md="6" lg="4" key={integrante.carnet}>
                   <Card className="home-card h-100">
                     <CardBody>
-                      <span className="card-number">
-                        {String(integrante.id).padStart(2, '0')}
-                      </span>
-                      <h2>{integrante.nombre}</h2>
                       <div className="character-details">
-                        <span>Edad: {integrante.edad} años</span>
+                        <span>Carnet: {integrante.carnet}</span>
+                        <span>Ciudad de origen: {integrante.ciudad}</span>
                         <span>Carrera: {integrante.carrera}</span>
                         <Badge color="light" pill>
-                          Materias aprobadas: {integrante.materiasAprobadas}
+                          Cantidad de proyectos realizados: {integrante.proyectosRealizados}
                         </Badge>
                       </div>
                     </CardBody>
